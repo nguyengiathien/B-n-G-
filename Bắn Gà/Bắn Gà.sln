@@ -9,32 +9,81 @@ const int width = 20;  // Chiều rộng của màn hình
 const int height = 15; // Chiều cao của màn hình
 char screen[height][width]; // Màn hình game
 
-int playerX = width / 2; // Vị trí người chơi
-int playerSpeed = 1; // Tốc độ mặc định của máy bay
-vector<pair<int, int>> bullets; // Danh sách đạn
-vector<pair<int, int>> chickens; // Danh sách gà
-vector<pair<int, int>> gifts; // Danh sách quà
-bool isRunning = true; // Trạng thái game
-
-int speedMultiplier = 1; // Hệ số tốc độ
-int chickenMoveTimer = 0; // Bộ đếm để kiểm soát tốc độ rơi của gà
-int giftMoveTimer = 0; // Bộ đếm để kiểm soát tốc độ rơi của quà
-bool upgradedBullet = false; // Trạng thái đạn nâng cấp
-int score = 0; // Điểm số
-int lives = 3; // Số mạng của máy bay
-
 HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE); // Xử lý console để thay đổi màu
+
+class GameObject {
+public:
+    int x, y;
+    char shape;
+
+    GameObject(int x, int y, char shape) : x(x), y(y), shape(shape) {}
+    virtual void move() = 0;
+};
+
+class Player : public GameObject {
+public:
+    int speed;
+
+    Player(int x, int y, char shape) : GameObject(x, y, shape), speed(1) {}
+
+    void move() override {
+        // Player movement is handled in processInput()
+    }
+};
+
+class Bullet : public GameObject {
+public:
+    Bullet(int x, int y, char shape) : GameObject(x, y, shape) {}
+
+    void move() override {
+        y--;
+    }
+};
+
+class Gift : public GameObject {
+public:
+    Gift(int x, int y, char shape) : GameObject(x, y, shape) {}
+
+    void move() override {
+        y++;
+    }
+};
+
+class Enemy : public GameObject {
+public:
+    Enemy(int x, int y, char shape) : GameObject(x, y, shape) {}
+
+    void move() override {
+        y++;
+    }
+};
+
+class Chicken : public Enemy {
+public:
+    Chicken(int x, int y, char shape) : Enemy(x, y, shape) {}
+};
+
+Player player(width / 2, height - 2, '^');
+vector<Bullet> bullets;
+vector<Chicken> chickens;
+vector<Gift> gifts;
+bool isRunning = true;
+bool upgradedBullet = false;
+int score = 0;
+int lives = 3;
+int speedMultiplier = 1;
+int chickenMoveTimer = 0;
+int giftMoveTimer = 0;
 
 void clearScreen() {
     system("cls"); // Xóa màn hình
 }
 
 void initializeScreen() {
-    // Làm sạch màn hình và tạo khung
     for (int i = 0; i < height; i++) {
         for (int j = 0; j < width; j++) {
             if (i == 0 || i == height - 1 || j == 0 || j == width - 1) {
-                screen[i][j] = '+'; // Khung
+                screen[i][j] = '+';
             }
             else {
                 screen[i][j] = ' ';
@@ -64,102 +113,86 @@ void drawScreen() {
         }
         cout << endl;
     }
-    // Hiển thị điểm và số mạng
     cout << "Score: " << score << "  Lives: " << lives << endl;
 }
 
 void updatePlayer() {
-    // Vẽ người chơi
-    screen[height - 2][playerX] = '^';
+    screen[player.y][player.x] = player.shape;
 }
 
 void updateBullets() {
-    // Di chuyển đạn
     for (auto& bullet : bullets) {
-        bullet.second--; // Di chuyển đạn lên trên
+        bullet.move();
     }
 
-    // Xóa đạn vượt khỏi màn hình
     bullets.erase(remove_if(bullets.begin(), bullets.end(),
-        [](pair<int, int> bullet) { return bullet.second < 1; }),
-        bullets.end());
+        [](Bullet& bullet) { return bullet.y < 1; }), bullets.end());
 
-    // Vẽ đạn
-    for (auto bullet : bullets) {
-        screen[bullet.second][bullet.first] = '|';
+    for (auto& bullet : bullets) {
+        screen[bullet.y][bullet.x] = bullet.shape;
     }
 }
 
 void updateChickens() {
-    if (chickenMoveTimer >= 5) { // Gà chỉ rơi khi bộ đếm đạt giá trị
-        // Di chuyển gà xuống dưới
+    if (chickenMoveTimer >= 5) {
         for (auto& chicken : chickens) {
-            chicken.second++;
+            chicken.move();
         }
 
-        // Kiểm tra va chạm với người chơi
         for (auto& chicken : chickens) {
-            if (chicken.second == height - 2 && chicken.first == playerX) {
-                lives--; // Giảm mạng nếu gà chạm vào người chơi
+            if (chicken.y == player.y && chicken.x == player.x) {
+                lives--;
                 if (lives == 0) {
-                    isRunning = false; // Kết thúc game nếu hết mạng
+                    isRunning = false;
                 }
             }
         }
 
-        // Xóa gà vượt khỏi màn hình
         chickens.erase(remove_if(chickens.begin(), chickens.end(),
-            [](pair<int, int> chicken) { return chicken.second >= height - 1; }),
-            chickens.end());
+            [](Chicken& chicken) { return chicken.y >= height - 1; }), chickens.end());
 
-        chickenMoveTimer = 0; // Đặt lại bộ đếm
+        chickenMoveTimer = 0;
     }
 
-    // Vẽ gà
-    for (auto chicken : chickens) {
-        screen[chicken.second][chicken.first] = 'G';
+    for (auto& chicken : chickens) {
+        screen[chicken.y][chicken.x] = chicken.shape;
     }
 }
 
 void updateGifts() {
-    if (giftMoveTimer >= 10) { // Quà chỉ rơi khi bộ đếm đạt giá trị
-        // Di chuyển quà xuống dưới
+    if (giftMoveTimer >= 10) {
         for (auto& gift : gifts) {
-            gift.second++;
+            gift.move();
         }
 
-        // Xóa quà vượt khỏi màn hình
         gifts.erase(remove_if(gifts.begin(), gifts.end(),
-            [](pair<int, int> gift) { return gift.second >= height - 1; }),
-            gifts.end());
+            [](Gift& gift) { return gift.y >= height - 1; }), gifts.end());
 
-        giftMoveTimer = 0; // Đặt lại bộ đếm
+        giftMoveTimer = 0;
     }
 
-    // Vẽ quà
-    for (auto gift : gifts) {
-        screen[gift.second][gift.first] = 'Q';
+    for (auto& gift : gifts) {
+        screen[gift.y][gift.x] = gift.shape;
     }
 }
 
 void checkCollisions() {
     for (size_t i = 0; i < bullets.size(); i++) {
         for (size_t j = 0; j < chickens.size(); j++) {
-            // Kiểm tra va chạm giữa đạn và gà
-            if (bullets[i].first == chickens[j].first && bullets[i].second == chickens[j].second) {
+            if (bullets[i].x == chickens[j].x && bullets[i].y == chickens[j].y) {
                 bullets.erase(bullets.begin() + i);
                 chickens.erase(chickens.begin() + j);
-                score += 10; // Tăng điểm
+                score += 10;
                 return;
             }
         }
 
         for (size_t j = 0; j < gifts.size(); j++) {
-            // Kiểm tra va chạm giữa đạn và quà
-            if (bullets[i].first == gifts[j].first && bullets[i].second == gifts[j].second) {
+            if (bullets[i].x == gifts[j].x && bullets[i].y == gifts[j].y) {
                 bullets.erase(bullets.begin() + i);
                 gifts.erase(gifts.begin() + j);
-                upgradedBullet = true; // Nâng cấp đạn
+                upgradedBullet = true;
+                score += 10;
                 return;
             }
         }
@@ -167,42 +200,38 @@ void checkCollisions() {
 }
 
 void spawnChicken() {
-    // Tạo gà ở vị trí ngẫu nhiên
-    int x = rand() % (width - 2) + 1; // Giới hạn trong khung
-    chickens.push_back({ x, 1 });
+    int x = rand() % (width - 2) + 1;
+    chickens.emplace_back(x, 1, 'G');
 }
 
 void spawnGift() {
-    // Tạo quà ở vị trí ngẫu nhiên
-    int x = rand() % (width - 2) + 1; // Giới hạn trong khung
-    gifts.push_back({ x, 1 });
+    int x = rand() % (width - 2) + 1;
+    gifts.emplace_back(x, 1, 'Q');
 }
 
 void processInput() {
     if (_kbhit()) {
         char ch = _getch();
-        if (ch == 'a' && playerX > 1) { // Phím A (di chuyển trái)
-            playerX -= playerSpeed;
-            if (playerX < 1) playerX = 1;
+        if (ch == 'a' && player.x > 1) {
+            player.x -= player.speed;
         }
-        else if (ch == 'd' && playerX < width - 2) { // Phím D (di chuyển phải)
-            playerX += playerSpeed;
-            if (playerX > width - 2) playerX = width - 2;
+        else if (ch == 'd' && player.x < width - 2) {
+            player.x += player.speed;
         }
-        else if (ch == ' ') { // Bắn đạn
-            bullets.push_back({ playerX, height - 3 });
-            if (upgradedBullet) { // Đạn nâng cấp bắn thêm 2 tia
-                if (playerX > 1) bullets.push_back({ playerX - 1, height - 3 });
-                if (playerX < width - 2) bullets.push_back({ playerX + 1, height - 3 });
+        else if (ch == ' ') {
+            bullets.emplace_back(player.x, height - 3, '|');
+            if (upgradedBullet) {
+                if (player.x > 1) bullets.emplace_back(player.x - 1, height - 3, '|');
+                if (player.x < width - 2) bullets.emplace_back(player.x + 1, height - 3, '|');
             }
         }
-        else if (ch == 's') { // Tăng tốc độ
-            playerSpeed = 2;
+        else if (ch == 's') {
+            player.speed = 2;
         }
-        else if (ch == 'r') { // Đặt lại tốc độ
-            playerSpeed = 1;
+        else if (ch == 'r') {
+            player.speed = 1;
         }
-        else if (ch == 'q') { // Thoát game
+        else if (ch == 'q') {
             isRunning = false;
         }
     }
